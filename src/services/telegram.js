@@ -441,24 +441,44 @@ class TelegramService {
 
     let message = `🚀 埋伏币入场信号\n\n`;
     message += `交易对: ${signal.symbol}\n`;
-    message += `信号类型: EMA 金叉确认\n`;
-    message += `观察池评分: ${signal.watchlistScore}/15\n`;
+    message += `信号类型: ${signal.signalType}\n`;
+    message += `观察池评分: ${signal.watchlistScore}/20+\n`;
     message += `当前价格: $${this.formatPrice(signal.currentPrice)}\n\n`;
 
     message += `📊 技术确认:\n`;
     message += `• EMA7: ${this.formatPrice(signal.ema7)}\n`;
     message += `• EMA25: ${this.formatPrice(signal.ema25)}\n`;
-    message += `• 量能确认: ${signal.volumeConfirm ? '✅ 是' : '❌ 否'}\n`;
-    message += `• 置信度: ${signal.confidence}%\n\n`;
+    message += `• 量能: ${signal.volumeMultiplier}x (${signal.volumeConfirm ? '✅' : '⚠️'})\n`;
+    message += `• RSI(14): ${signal.rsi}\n`;
+    message += `• 置信度: ${signal.confidence}%\n`;
+    if (signal.btcTrend) {
+      const btcEmoji = signal.btcTrend === 'bullish' ? '🟢' : '🔴';
+      message += `• BTC趋势: ${btcEmoji} ${signal.btcTrend === 'bullish' ? '多头' : '空头'}\n`;
+    }
+    message += `\n`;
+
+    message += `✅ 触发原因:\n`;
+    if (signal.reasons && signal.reasons.length > 0) {
+      signal.reasons.forEach(reason => {
+        message += `• ${reason}\n`;
+      });
+    }
+    message += `\n`;
 
     message += `💡 操作建议:\n`;
     if (signal.volumeConfirm && signal.confidence >= 80) {
-      message += `• 可考虑轻仓试探\n`;
+      message += `✅ 建议试探性入场\n`;
       message += `• 建议仓位: 5-10%\n`;
-      message += `• 止损位: EMA25 下方（${this.formatPrice(signal.ema25 * 0.97)}）\n`;
+      message += `• 止损位: EMA25 下方（$${this.formatPrice(signal.ema25 * 0.97)}）\n`;
+      message += `• 止盈位: +10~15%\n`;
     } else {
-      message += `• 等待放量确认再入场\n`;
-      message += `• 密切关注成交量变化\n`;
+      message += `⚠️ 谨慎观望\n`;
+      message += `• 信号强度不够，建议等待\n`;
+      message += `• 关注量能是否持续放大\n`;
+    }
+    
+    if (signal.warning) {
+      message += `\n${signal.warning}\n`;
     }
 
     message += `\n⏰ ${timeStr}`;
