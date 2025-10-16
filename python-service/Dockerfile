@@ -26,10 +26,10 @@ RUN ldconfig
 COPY requirements.txt .
 
 # Install numpy first (TA-Lib dependency)
-RUN pip install --no-cache-dir numpy==1.24.3
+RUN pip install --no-cache-dir numpy==1.23.5
 
 # Install TA-Lib Python wrapper
-RUN pip install --no-cache-dir TA-Lib==0.4.28
+RUN pip install --no-cache-dir TA-Lib==0.4.24
 
 # Install remaining dependencies
 RUN pip install --no-cache-dir Flask==3.0.0 flask-cors==4.0.0 gunicorn==21.2.0
