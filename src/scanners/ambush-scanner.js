@@ -521,12 +521,32 @@ class AmbushScanner {
 
   /**
    * Check watchlist for entry signals (优化：5分钟检查)
-   * 增加：即将金叉预警、价格暴涨移出、多重触发条件
+   * 增加：即将金叉预警、价格暴涨移出、多重触发条件、BTC市场环境过滤
    */
   async checkWatchlistForEntries() {
     const entrySignals = [];
     const preWarnings = [];  // 即将金叉预警
     const toRemove = [];  // 需要移出的币种
+
+    // === 【BTC市场环境检查】===
+    let btcTrend = 'neutral';
+    let btcAdx = 0;
+    try {
+      const btcKlines = await this.binance.getKlines('BTCUSDT', '1h', 50);
+      if (btcKlines && btcKlines.length >= 50) {
+        const btcCloses = btcKlines.map(k => k.close);
+        const btcEma7 = this.calculateSimpleEMA(btcCloses, 7);
+        const btcEma25 = this.calculateSimpleEMA(btcCloses, 25);
+        btcTrend = btcEma7 > btcEma25 ? 'bullish' : 'bearish';
+        // 简化ADX计算（可选）
+        const btcRsi = this.calculateSimpleRSI(btcCloses, 14);
+        btcAdx = btcRsi > 50 ? 25 : 15; // 简化版
+        
+        logger.info(`📊 BTC市场环境: ${btcTrend} | ADX: ${btcAdx}`);
+      }
+    } catch (error) {
+      logger.debug(`Failed to check BTC trend: ${error.message}`);
+    }
 
     for (const [symbol, entry] of this.watchlist.entries()) {
       try {
@@ -568,51 +588,97 @@ class AmbushScanner {
           entry.preWarned = true;  // 标记已预警，避免重复
         }
 
-        // 触发条件1：EMA 金叉
+        // 触发条件1：EMA 金叉（必须有量能确认）
         const goldenCross = prevEma7 <= prevEma25 && ema7 > ema25;
         
-        // 触发条件2：放量突破
+        // 触发条件2：放量确认（严格要求）
         const avgVolume = volumes.slice(-10, -1).reduce((a, b) => a + b, 0) / 9;
         const currentVolume = volumes[volumes.length - 1];
         const volumeBreakout = currentVolume > avgVolume * 2;  // 2倍放量
+        const volumeConfirm = currentVolume > avgVolume * 1.5;  // 1.5倍量能确认
         const priceBreakout = ((currentPrice - closes[closes.length - 2]) / closes[closes.length - 2]) * 100 > 5;
 
         // 触发条件3：突破近期高点
         const recentHigh = Math.max(...highs.slice(-10, -1));
         const breakoutHigh = currentPrice > recentHigh * 1.02;
 
-        // 综合判断
+        // 触发条件4：RSI 确认（避免超买）
+        const rsi = this.calculateSimpleRSI(closes, 14);
+        const rsiOk = rsi >= 45 && rsi <= 70;  // RSI在合理区间
+
+        // 触发条件5：金叉后回踩确认（更可靠）
+        const goldenCrossConfirmed = goldenCross && ema7 > ema25 * 1.005; // 金叉后EMA7要明显在EMA25之上
+
+        // ===【综合判断 - 多重确认机制】===
         let triggered = false;
         let signalType = '';
         let confidence = 60;
+        let reasons = [];
 
-        if (goldenCross) {
+        // 方案1：金叉 + 量能确认 + RSI正常（最严格）
+        if (goldenCrossConfirmed && volumeConfirm && rsiOk) {
           triggered = true;
-          signalType = 'EMA金叉';
-          confidence = volumeBreakout && currentVolume > avgVolume * 1.5 ? 85 : 70;
-        } else if (volumeBreakout && priceBreakout) {
+          signalType = 'EMA金叉+放量';
+          confidence = volumeBreakout ? 90 : 80;
+          reasons = ['EMA金叉确认', '量能放大', 'RSI正常'];
+        } 
+        // 方案2：放量突破 + 价格突破 + RSI正常
+        else if (volumeBreakout && priceBreakout && rsiOk) {
           triggered = true;
           signalType = '放量突破';
-          confidence = 80;
-        } else if (breakoutHigh && volumeBreakout) {
+          confidence = 85;
+          reasons = ['放量2倍+', '价格突破5%+', 'RSI正常'];
+        } 
+        // 方案3：突破前高 + 放量 + 接近金叉
+        else if (breakoutHigh && volumeBreakout && Math.abs(emaGap) < 0.02 && rsiOk) {
           triggered = true;
-          signalType = '突破前高';
-          confidence = 75;
+          signalType = '突破前高+放量';
+          confidence = 82;
+          reasons = ['突破近期高点', '放量2倍+', 'EMA即将金叉', 'RSI正常'];
+        }
+        // 方案4：仅金叉但无量能 - 不触发，只记录
+        else if (goldenCross && !volumeConfirm) {
+          logger.info(`⚠️ ${symbol} 金叉但量能不足，不发送信号（量能：${(currentVolume/avgVolume).toFixed(2)}x）`);
         }
 
         if (triggered) {
+          // === 【BTC市场环境过滤】===
+          let finalConfidence = confidence;
+          let warning = '';
+          
+          // BTC弱势时降低置信度
+          if (btcTrend === 'bearish' && btcAdx > 20) {
+            finalConfidence = Math.floor(confidence * 0.8); // 降低20%置信度
+            warning = '⚠️ BTC弱势，谨慎进场';
+            reasons.push('BTC弱势环境');
+          }
+          
+          // 如果最终置信度<75%，不发送信号
+          if (finalConfidence < 75) {
+            logger.info(`⚠️ ${symbol} 触发信号但置信度不足 ${finalConfidence}% (<75%)，不发送 | BTC: ${btcTrend}`);
+            continue;
+          }
+
           entrySignals.push({
             symbol,
             signalType,
             watchlistScore: entry.highestScore,
             ema7,
             ema25,
-            volumeConfirm: currentVolume > avgVolume * 1.5,
-            confidence,
+            volumeConfirm: volumeConfirm,
+            volumeMultiplier: (currentVolume / avgVolume).toFixed(2),
+            rsi: rsi.toFixed(1),
+            confidence: finalConfidence,
             currentPrice,
+            reasons: reasons,
+            btcTrend: btcTrend,
+            warning: warning,
           });
 
-          logger.info(`🚀 Entry signal: ${symbol} - ${signalType} (confidence: ${confidence}%)`);
+          logger.info(`🚀 Entry signal: ${symbol} - ${signalType} (confidence: ${finalConfidence}%)`);
+          logger.info(`   触发原因: ${reasons.join(', ')}`);
+          logger.info(`   量能: ${(currentVolume/avgVolume).toFixed(2)}x | RSI: ${rsi.toFixed(1)} | BTC: ${btcTrend}`);
+          if (warning) logger.info(`   ${warning}`);
           
           // 发出信号后，从观察池移出（已启动）
           toRemove.push(symbol);
