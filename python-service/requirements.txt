@@ -1,6 +1,6 @@
 Flask==3.0.0
 flask-cors==4.0.0
-TA-Lib==0.4.28
-numpy==1.24.3
+TA-Lib==0.4.24
+numpy==1.23.5
 gunicorn==21.2.0
 
