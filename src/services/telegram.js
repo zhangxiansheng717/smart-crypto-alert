@@ -87,31 +87,32 @@ class TelegramService {
   }
 
   /**
-   * Get Beijing time string (UTC+8) in 24-hour format
-   * 格式: YYYY-MM-DD HH:mm:ss (北京时间)
+   * Get formatted time string (server local time, 24-hour format)
+   * 格式: YYYY-MM-DD HH:mm:ss
    */
-  getBeijingTimeString() {
+  getTimeString() {
     const now = new Date();
-    // 转换为北京时间（UTC+8）
-    const beijingTime = new Date(now.getTime() + (now.getTimezoneOffset() * 60 * 1000) + (8 * 60 * 60 * 1000));
-    
-    const year = beijingTime.getUTCFullYear();
-    const month = String(beijingTime.getUTCMonth() + 1).padStart(2, '0');
-    const date = String(beijingTime.getUTCDate()).padStart(2, '0');
-    const hours = String(beijingTime.getUTCHours()).padStart(2, '0');
-    const minutes = String(beijingTime.getUTCMinutes()).padStart(2, '0');
-    const seconds = String(beijingTime.getUTCSeconds()).padStart(2, '0');
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const date = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
     
     return `${year}-${month}-${date} ${hours}:${minutes}:${seconds}`;
   }
 
   /**
-   * Get Beijing time for scheduling (hour only)
+   * Get formatted hour string (for reports)
    */
-  getBeijingHour() {
+  getHourString() {
     const now = new Date();
-    const beijingTime = new Date(now.getTime() + (now.getTimezoneOffset() * 60 * 1000) + (8 * 60 * 60 * 1000));
-    return `${beijingTime.getUTCFullYear()}-${String(beijingTime.getUTCMonth() + 1).padStart(2, '0')}-${String(beijingTime.getUTCDate()).padStart(2, '0')} ${String(beijingTime.getUTCHours()).padStart(2, '0')}:00`;
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const date = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    
+    return `${year}-${month}-${date} ${hours}:00`;
   }
 
   /**
@@ -295,8 +296,8 @@ class TelegramService {
     const emoji = this.getTimeframeEmoji(interval);
     const threshold = this.config.monitor.thresholds[interval] || 0;
 
-    // Format time (Beijing time, 24-hour)
-    const timeStr = this.getBeijingTimeString();
+    // Format time (24-hour)
+    const timeStr = this.getTimeString();
 
     // RSI status
     let rsiStatus = '📊 中性';
@@ -378,7 +379,7 @@ class TelegramService {
       message += `\n`;
     }
 
-    message += `时间: ${timeStr} (北京时间)`;
+    message += `时间: ${timeStr}`;
 
     try {
       await this.bot.sendMessage(this.chatId, message);
@@ -396,9 +397,9 @@ class TelegramService {
       return;
     }
 
-    const timeStr = this.getBeijingHour();
+    const timeStr = this.getHourString();
 
-    let message = `🔍 埋伏币扫描报告（${timeStr} 北京时间）\n\n`;
+    let message = `🔍 埋伏币扫描报告（${timeStr}）\n\n`;
     message += `📊 融合评分系统（日线+小时线）\n`;
     message += `发现 ${candidates.length} 个潜力币种：\n\n`;
 
@@ -462,7 +463,7 @@ class TelegramService {
       return;
     }
 
-    const timeStr = this.getBeijingTimeString();
+    const timeStr = this.getTimeString();
 
     let message = `🚀 埋伏币入场信号\n\n`;
     message += `交易对: ${signal.symbol}\n`;
@@ -506,7 +507,7 @@ class TelegramService {
       message += `\n${signal.warning}\n`;
     }
 
-    message += `\n⏰ ${timeStr} (北京时间)`;
+    message += `\n⏰ ${timeStr}`;
 
     try {
       await this.bot.sendMessage(this.chatId, message);
@@ -525,7 +526,7 @@ class TelegramService {
     const { type, position, currentPrice, pnl } = alertData;
     const dirText = position.direction === 'long' ? '多头' : '空头';
 
-    const timeStr = this.getBeijingTimeString();
+    const timeStr = this.getTimeString();
 
     let message = '';
 
@@ -538,7 +539,7 @@ class TelegramService {
         message += `止损价: $${this.formatPrice(position.stopLoss)}\n`;
         message += `盈亏: ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%\n\n`;
         message += `⚠️ 建议: 立即止损离场，控制损失\n`;
-        message += `\n⏰ ${timeStr} (北京时间)`;
+        message += `\n⏰ ${timeStr}`;
         break;
 
       case 'take_profit':
@@ -554,7 +555,7 @@ class TelegramService {
         if (alertData.tpLevel === 1) {
           message += `剩余仓位继续持有，止损移至成本价\n`;
         }
-        message += `\n⏰ ${timeStr} (北京时间)`;
+        message += `\n⏰ ${timeStr}`;
         break;
 
       case 'rsi_extreme':
@@ -566,7 +567,7 @@ class TelegramService {
         message += `RSI: ${alertData.rsi.toFixed(0)}\n`;
         message += `盈亏: ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%\n\n`;
         message += `💡 建议: 考虑分批止盈，或移动止损保护利润\n`;
-        message += `\n⏰ ${timeStr} (北京时间)`;
+        message += `\n⏰ ${timeStr}`;
         break;
 
       case 'trend_reversal':
@@ -577,7 +578,7 @@ class TelegramService {
         message += `EMA25: ${this.formatPrice(alertData.ema25)}\n`;
         message += `盈亏: ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%\n\n`;
         message += `⚠️ 建议: 趋势反转，考虑止盈离场\n`;
-        message += `\n⏰ ${timeStr} (北京时间)`;
+        message += `\n⏰ ${timeStr}`;
         break;
 
       case 'pattern_reversal':
@@ -587,7 +588,7 @@ class TelegramService {
         message += `检测到: ${patterns}\n`;
         message += `盈亏: ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%\n\n`;
         message += `⚠️ 建议: 出现反转形态，考虑止盈或收紧止损\n`;
-        message += `\n⏰ ${timeStr} (北京时间)`;
+        message += `\n⏰ ${timeStr}`;
         break;
 
       default:
